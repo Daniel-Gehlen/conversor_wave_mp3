@@ -6,7 +6,7 @@ import io
 app = Flask(__name__)
 
 # Rota para receber partes do arquivo
-@app.route('/upload-chunk', methods=['POST'])
+@app.route('/convert', methods=['POST'])
 def upload_chunk():
     file = request.files['file']
     chunk_index = int(request.form['chunkIndex'])
