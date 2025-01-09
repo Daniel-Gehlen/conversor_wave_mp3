@@ -6,7 +6,8 @@
       "use": "@vercel/python",
       "config": {
         "installCommand": "pip install -r requirements.txt",
-        "buildCommand": "bash build.sh"
+        "buildCommand": "bash build.sh",
+        "maxLambdaSize": "50mb"
       }
     }
   ],
