@@ -55,7 +55,7 @@ form.addEventListener('submit', async (e) => {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ fileName: file.name }),
+            body: JSON.stringify({ fileName: file.name, totalChunks: totalChunks }),
         });
 
         if (!convertResponse.ok) {

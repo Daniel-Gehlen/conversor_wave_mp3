@@ -1,12 +1,18 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, render_template
 import ffmpeg
 import io
+import os
 
 # Configuração do Flask
 app = Flask(__name__)
 
+# Rota principal para servir o frontend
+@app.route('/')
+def index():
+    return render_template('index.html')  # Serve o arquivo index.html
+
 # Rota para receber partes do arquivo
-@app.route('/convert', methods=['POST'])
+@app.route('/upload-chunk', methods=['POST'])
 def upload_chunk():
     file = request.files['file']
     chunk_index = int(request.form['chunkIndex'])
@@ -16,9 +22,7 @@ def upload_chunk():
     # Armazena a parte do arquivo em memória
     chunk_data = file.read()
 
-    # Aqui você pode armazenar as partes em uma lista global (não recomendado para produção)
-    # Ou usar um banco de dados em memória como Redis (gratuito para pequenos volumes)
-    # Para este exemplo, vamos simular o processo
+    # Armazena as partes em um dicionário global (não recomendado para produção)
     if not hasattr(app, 'chunks'):
         app.chunks = {}
     app.chunks[f'{file_name}.part{chunk_index}'] = chunk_data
@@ -30,6 +34,7 @@ def upload_chunk():
 def convert():
     data = request.get_json()
     file_name = data['fileName']
+    total_chunks = data['totalChunks']  # Adicionado para evitar erro de variável não definida
 
     # Cria um buffer em memória para o arquivo completo
     full_file = io.BytesIO()
@@ -56,7 +61,12 @@ def convert():
 
             # Envia o arquivo MP3 como download
             mp3_buffer.seek(0)
-            return send_file(mp3_buffer, as_attachment=True, download_name=f'{os.path.splitext(file_name)[0]}.mp3')
+            return send_file(
+                mp3_buffer,
+                as_attachment=True,
+                download_name=f'{os.path.splitext(file_name)[0]}.mp3',
+                mimetype='audio/mpeg'
+            )
 
     except ffmpeg.Error as e:
         return jsonify({"error": f"Erro ao converter o arquivo: {e.stderr.decode()}"}), 500
