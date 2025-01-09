@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, send_file, jsonify
-from pydub import AudioSegment
+import ffmpeg  # Usando ffmpeg-python em vez de pydub
 import os
 import tempfile
 import shutil
@@ -7,10 +7,18 @@ import shutil
 # Configuração do Flask
 app = Flask(__name__, template_folder=".", static_folder=".")
 
-# Função para converter WAV para MP3
+# Função para converter WAV para MP3 usando ffmpeg-python
 def convert_wav_to_mp3(wav_path, mp3_path):
-    audio = AudioSegment.from_wav(wav_path)
-    audio.export(mp3_path, format="mp3")
+    try:
+        # Usa o ffmpeg-python para converter o arquivo
+        (
+            ffmpeg
+            .input(wav_path)
+            .output(mp3_path)
+            .run()
+        )
+    except ffmpeg.Error as e:
+        raise Exception(f"Erro ao converter o arquivo: {e.stderr.decode()}")
 
 # Rota principal
 @app.route("/")
