@@ -13,40 +13,58 @@ form.addEventListener('submit', async (e) => {
         return;
     }
 
-    // Desabilita o botão de conversão e exibe o status
+    // Tamanho máximo de cada parte (50 MB)
+    const chunkSize = 50 * 1024 * 1024; // 50 MB em bytes
+    const totalChunks = Math.ceil(file.size / chunkSize);
+
     convertButton.disabled = true;
     statusText.textContent = "Convertendo...";
     progressBar.style.width = "0%";
 
-    // Cria um objeto FormData para enviar o arquivo
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
-        // Envia o arquivo para o backend
-        const response = await fetch('/convert', {
-            method: 'POST',
-            body: formData,
-        });
+        // Envia cada parte do arquivo
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * chunkSize;
+            const end = Math.min(start + chunkSize, file.size);
+            const chunk = file.slice(start, end);
 
-        // Verifica se a resposta foi bem-sucedida
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Erro desconhecido');
+            const formData = new FormData();
+            formData.append('file', chunk);
+            formData.append('chunkIndex', i);
+            formData.append('totalChunks', totalChunks);
+            formData.append('fileName', file.name);
+
+            const response = await fetch('/upload-chunk', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Erro ao enviar parte do arquivo.');
+            }
+
+            // Atualiza a barra de progresso
+            const progress = ((i + 1) / totalChunks) * 100;
+            progressBar.style.width = `${progress}%`;
         }
 
-        // Simula uma barra de progresso
-        let progress = 0;
-        const interval = setInterval(() => {
-            progress += 10;
-            progressBar.style.width = `${progress}%`;
-            if (progress >= 100) {
-                clearInterval(interval);
-            }
-        }, 300);
+        // Solicita a conversão do arquivo completo
+        const convertResponse = await fetch('/convert', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ fileName: file.name }),
+        });
+
+        if (!convertResponse.ok) {
+            const errorData = await convertResponse.json();
+            throw new Error(errorData.error || 'Erro ao converter o arquivo.');
+        }
 
         // Faz o download do arquivo MP3 convertido
-        const blob = await response.blob();
+        const blob = await convertResponse.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -54,13 +72,10 @@ form.addEventListener('submit', async (e) => {
         a.click();
         window.URL.revokeObjectURL(url);
 
-        // Exibe mensagem de conclusão
         statusText.textContent = "Conversão concluída!";
     } catch (error) {
-        // Exibe mensagem de erro
         statusText.textContent = `Erro: ${error.message}`;
     } finally {
-        // Reabilita o botão de conversão
         convertButton.disabled = false;
     }
 });

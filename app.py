@@ -1,81 +1,57 @@
-from flask import Flask, render_template, request, send_file, jsonify
-import ffmpeg
+from flask import Flask, request, jsonify, send_file
 import os
 import tempfile
 import shutil
 
-# Configuração do Flask
-app = Flask(__name__, template_folder=".", static_folder=".")
+app = Flask(__name__)
 
-# Define o limite de tamanho de upload para 2 GB
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB em bytes
+# Pasta temporária para armazenar partes do arquivo
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Função para converter WAV para MP3 usando ffmpeg-python
-def convert_wav_to_mp3(wav_path, mp3_path):
+# Rota para receber partes do arquivo
+@app.route('/upload-chunk', methods=['POST'])
+def upload_chunk():
+    file = request.files['file']
+    chunk_index = int(request.form['chunkIndex'])
+    total_chunks = int(request.form['totalChunks'])
+    file_name = request.form['fileName']
+
+    # Salva a parte do arquivo
+    chunk_path = os.path.join(UPLOAD_FOLDER, f'{file_name}.part{chunk_index}')
+    file.save(chunk_path)
+
+    return jsonify({"message": "Parte recebida com sucesso."})
+
+# Rota para converter o arquivo completo
+@app.route('/convert', methods=['POST'])
+def convert():
+    data = request.get_json()
+    file_name = data['fileName']
+
+    # Reúne as partes do arquivo
+    output_path = os.path.join(UPLOAD_FOLDER, file_name)
+    with open(output_path, 'wb') as output_file:
+        for i in range(total_chunks):
+            chunk_path = os.path.join(UPLOAD_FOLDER, f'{file_name}.part{i}')
+            with open(chunk_path, 'rb') as chunk_file:
+                output_file.write(chunk_file.read())
+            os.remove(chunk_path)  # Remove a parte após a junção
+
+    # Converte o arquivo WAV para MP3 (usando ffmpeg)
+    mp3_path = os.path.join(UPLOAD_FOLDER, f'{os.path.splitext(file_name)[0]}.mp3')
     try:
-        # Usa o ffmpeg-python para converter o arquivo
         (
             ffmpeg
-            .input(wav_path)
+            .input(output_path)
             .output(mp3_path)
             .run()
         )
     except ffmpeg.Error as e:
-        raise Exception(f"Erro ao converter o arquivo: {e.stderr.decode()}")
+        return jsonify({"error": f"Erro ao converter o arquivo: {e.stderr.decode()}"}), 500
 
-# Rota principal
-@app.route("/")
-def index():
-    return render_template("index.html")
+    # Envia o arquivo MP3 como download
+    return send_file(mp3_path, as_attachment=True)
 
-# Rota para servir arquivos estáticos (CSS e JS)
-@app.route("/<filename>")
-def static_files(filename):
-    return app.send_static_file(filename)
-
-# Rota para conversão
-@app.route("/convert", methods=["POST"])
-def convert():
-    if "file" not in request.files:
-        return jsonify({"error": "Nenhum arquivo enviado."}), 400
-
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"error": "Nenhum arquivo selecionado."}), 400
-
-    # Cria um diretório temporário
-    tmpdir = tempfile.mkdtemp()
-    try:
-        wav_path = os.path.join(tmpdir, file.filename)
-        mp3_filename = f"{os.path.splitext(file.filename)[0]}.mp3"
-        mp3_path = os.path.join(tmpdir, mp3_filename)
-
-        # Salva o WAV no diretório temporário
-        file.save(wav_path)
-
-        # Converte o WAV para MP3
-        convert_wav_to_mp3(wav_path, mp3_path)
-
-        # Envia o arquivo MP3 como download
-        response = send_file(
-            mp3_path,
-            as_attachment=True,
-            download_name=mp3_filename,
-            mimetype="audio/mpeg"
-        )
-
-        # Fecha o arquivo explicitamente após o envio
-        response.call_on_close(lambda: shutil.rmtree(tmpdir, ignore_errors=True))
-        return response
-
-    except Exception as e:
-        # Remove o diretório temporário em caso de erro
-        shutil.rmtree(tmpdir, ignore_errors=True)
-        return jsonify({"error": f"Erro durante a conversão: {str(e)}"}), 500
-
-# Inicia o servidor Flask
 if __name__ == "__main__":
-    # Configurações para produção
-    app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
-    app.config['DEBUG'] = False
     app.run(host='0.0.0.0', port=5000)
