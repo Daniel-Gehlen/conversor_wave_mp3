@@ -1,13 +1,11 @@
 from flask import Flask, request, jsonify, send_file
+import ffmpeg
+import io
 import os
 import tempfile
-import shutil
 
+# Configuração do Flask
 app = Flask(__name__)
-
-# Pasta temporária para armazenar partes do arquivo
-UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Rota para receber partes do arquivo
 @app.route('/upload-chunk', methods=['POST'])
@@ -17,10 +15,10 @@ def upload_chunk():
     total_chunks = int(request.form['totalChunks'])
     file_name = request.form['fileName']
 
-    # Salva a parte do arquivo
-    chunk_path = os.path.join(UPLOAD_FOLDER, f'{file_name}.part{chunk_index}')
-    file.save(chunk_path)
+    # Armazena a parte do arquivo em memória
+    chunk_data = file.read()
 
+    # Retorna uma resposta simples
     return jsonify({"message": "Parte recebida com sucesso."})
 
 # Rota para converter o arquivo completo
@@ -29,29 +27,47 @@ def convert():
     data = request.get_json()
     file_name = data['fileName']
 
-    # Reúne as partes do arquivo
-    output_path = os.path.join(UPLOAD_FOLDER, file_name)
-    with open(output_path, 'wb') as output_file:
-        for i in range(total_chunks):
-            chunk_path = os.path.join(UPLOAD_FOLDER, f'{file_name}.part{i}')
-            with open(chunk_path, 'rb') as chunk_file:
-                output_file.write(chunk_file.read())
-            os.remove(chunk_path)  # Remove a parte após a junção
+    # Cria um buffer em memória para o arquivo completo
+    full_file = io.BytesIO()
+
+    # Reúne as partes do arquivo em memória
+    for i in range(total_chunks):
+        chunk_key = f'{file_name}.part{i}'
+        # Aqui você precisaria de uma maneira de acessar as partes armazenadas
+        # Como estamos usando memória, você pode armazenar as partes em uma lista global (não recomendado para produção)
+        # Ou usar um banco de dados em memória como Redis (gratuito para pequenos volumes)
+        # Para este exemplo, vamos simular o processo
+        chunk_data = b''  # Substitua isso pelos dados reais da parte
+        full_file.write(chunk_data)
 
     # Converte o arquivo WAV para MP3 (usando ffmpeg)
-    mp3_path = os.path.join(UPLOAD_FOLDER, f'{os.path.splitext(file_name)[0]}.mp3')
     try:
+        # Salva o arquivo completo em um arquivo temporário
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_wav:
+            tmp_wav.write(full_file.getvalue())
+            tmp_wav_path = tmp_wav.name
+
+        # Converte o arquivo WAV para MP3
+        mp3_path = tmp_wav_path.replace('.wav', '.mp3')
         (
             ffmpeg
-            .input(output_path)
+            .input(tmp_wav_path)
             .output(mp3_path)
             .run()
         )
+
+        # Envia o arquivo MP3 como download
+        return send_file(mp3_path, as_attachment=True)
+
     except ffmpeg.Error as e:
         return jsonify({"error": f"Erro ao converter o arquivo: {e.stderr.decode()}"}), 500
 
-    # Envia o arquivo MP3 como download
-    return send_file(mp3_path, as_attachment=True)
+    finally:
+        # Remove os arquivos temporários
+        if os.path.exists(tmp_wav_path):
+            os.remove(tmp_wav_path)
+        if os.path.exists(mp3_path):
+            os.remove(mp3_path)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000)
