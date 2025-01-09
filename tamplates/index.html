@@ -5,16 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Conversor de WAVE para MP3</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
 </head>
 <body>
     <div class="container">
         <h1>Conversor de WAVE para MP3</h1>
         <form id="uploadForm">
             <input type="file" id="fileInput" accept="audio/wav" required>
-            <div class="progress-bar">
-                <div class="progress" id="progressBar"></div>
-            </div>
             <button type="submit" id="convertButton">Converter</button>
         </form>
         <p id="status"></p>

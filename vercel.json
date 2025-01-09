@@ -3,15 +3,18 @@
   "builds": [
     {
       "src": "app.py",
-      "use": "@vercel/python",
-      "config": {
-        "installCommand": "pip install -r requirements.txt",
-        "buildCommand": "bash build.sh",
-        "maxLambdaSize": "50mb"
-      }
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/convert.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/convert.js"
+    },
     {
       "src": "/(.*)",
       "dest": "app.py"
