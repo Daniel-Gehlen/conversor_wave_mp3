@@ -13,26 +13,23 @@ form.addEventListener('submit', async (e) => {
         return;
     }
 
-    // Verifica o tamanho do arquivo (4.5 MB)
-    const maxSize = 4.5 * 1024 * 1024; // 4.5 MB em bytes
-    if (file.size > maxSize) {
-        alert('O arquivo é muito grande. O tamanho máximo permitido é 4.5 MB.');
-        return;
-    }
-
+    // Desabilita o botão de conversão e exibe o status
     convertButton.disabled = true;
     statusText.textContent = "Convertendo...";
     progressBar.style.width = "0%";
 
+    // Cria um objeto FormData para enviar o arquivo
     const formData = new FormData();
     formData.append('file', file);
 
     try {
+        // Envia o arquivo para o backend
         const response = await fetch('/convert', {
             method: 'POST',
             body: formData,
         });
 
+        // Verifica se a resposta foi bem-sucedida
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || 'Erro desconhecido');
@@ -48,7 +45,7 @@ form.addEventListener('submit', async (e) => {
             }
         }, 300);
 
-        // Faz o download do arquivo
+        // Faz o download do arquivo MP3 convertido
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -57,10 +54,13 @@ form.addEventListener('submit', async (e) => {
         a.click();
         window.URL.revokeObjectURL(url);
 
+        // Exibe mensagem de conclusão
         statusText.textContent = "Conversão concluída!";
     } catch (error) {
+        // Exibe mensagem de erro
         statusText.textContent = `Erro: ${error.message}`;
     } finally {
+        // Reabilita o botão de conversão
         convertButton.disabled = false;
     }
 });
