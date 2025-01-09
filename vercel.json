@@ -11,5 +11,8 @@
       "src": "/(.*)",
       "dest": "app.py"
     }
-  ]
+  ],
+  "limits": {
+    "bodySize": "50mb"  
+  }
 }
