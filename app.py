@@ -1,8 +1,6 @@
 from flask import Flask, request, jsonify, send_file
 import ffmpeg
 import io
-import os
-import tempfile
 
 # Configuração do Flask
 app = Flask(__name__)
@@ -18,7 +16,13 @@ def upload_chunk():
     # Armazena a parte do arquivo em memória
     chunk_data = file.read()
 
-    # Retorna uma resposta simples
+    # Aqui você pode armazenar as partes em uma lista global (não recomendado para produção)
+    # Ou usar um banco de dados em memória como Redis (gratuito para pequenos volumes)
+    # Para este exemplo, vamos simular o processo
+    if not hasattr(app, 'chunks'):
+        app.chunks = {}
+    app.chunks[f'{file_name}.part{chunk_index}'] = chunk_data
+
     return jsonify({"message": "Parte recebida com sucesso."})
 
 # Rota para converter o arquivo completo
@@ -33,41 +37,29 @@ def convert():
     # Reúne as partes do arquivo em memória
     for i in range(total_chunks):
         chunk_key = f'{file_name}.part{i}'
-        # Aqui você precisaria de uma maneira de acessar as partes armazenadas
-        # Como estamos usando memória, você pode armazenar as partes em uma lista global (não recomendado para produção)
-        # Ou usar um banco de dados em memória como Redis (gratuito para pequenos volumes)
-        # Para este exemplo, vamos simular o processo
-        chunk_data = b''  # Substitua isso pelos dados reais da parte
-        full_file.write(chunk_data)
+        if chunk_key in app.chunks:
+            full_file.write(app.chunks[chunk_key])
+        else:
+            return jsonify({"error": f"Parte {i} do arquivo não encontrada."}), 400
 
     # Converte o arquivo WAV para MP3 (usando ffmpeg)
     try:
-        # Salva o arquivo completo em um arquivo temporário
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_wav:
-            tmp_wav.write(full_file.getvalue())
-            tmp_wav_path = tmp_wav.name
+        # Salva o arquivo completo em um buffer temporário
+        full_file.seek(0)  # Volta ao início do buffer
+        with io.BytesIO() as mp3_buffer:
+            (
+                ffmpeg
+                .input('pipe:0')  # Lê da entrada padrão (buffer)
+                .output('pipe:1', format='mp3')  # Escreve na saída padrão (buffer)
+                .run(input=full_file.read(), capture_stdout=True, capture_stderr=True)
+            )
 
-        # Converte o arquivo WAV para MP3
-        mp3_path = tmp_wav_path.replace('.wav', '.mp3')
-        (
-            ffmpeg
-            .input(tmp_wav_path)
-            .output(mp3_path)
-            .run()
-        )
-
-        # Envia o arquivo MP3 como download
-        return send_file(mp3_path, as_attachment=True)
+            # Envia o arquivo MP3 como download
+            mp3_buffer.seek(0)
+            return send_file(mp3_buffer, as_attachment=True, download_name=f'{os.path.splitext(file_name)[0]}.mp3')
 
     except ffmpeg.Error as e:
         return jsonify({"error": f"Erro ao converter o arquivo: {e.stderr.decode()}"}), 500
-
-    finally:
-        # Remove os arquivos temporários
-        if os.path.exists(tmp_wav_path):
-            os.remove(tmp_wav_path)
-        if os.path.exists(mp3_path):
-            os.remove(mp3_path)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000)
