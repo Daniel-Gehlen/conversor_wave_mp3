@@ -2,22 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "app.py",
+      "src": "wsgi.py",
       "use": "@vercel/python"
-    },
-    {
-      "src": "api/convert.js",
-      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "api/convert.js"
-    },
-    {
       "src": "/(.*)",
-      "dest": "app.py"
+      "dest": "wsgi.py"
     }
   ]
 }

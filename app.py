@@ -1,10 +1,14 @@
 from flask import Flask, request, jsonify, send_file, render_template
 import ffmpeg
-import io
 import os
+import tempfile
+from threading import Thread
 
 # Configuração do Flask
 app = Flask(__name__)
+
+# Pasta temporária para armazenar as partes do arquivo
+UPLOAD_FOLDER = tempfile.mkdtemp()
 
 # Rota principal para servir o frontend
 @app.route('/')
@@ -19,57 +23,52 @@ def upload_chunk():
     total_chunks = int(request.form['totalChunks'])
     file_name = request.form['fileName']
 
-    # Armazena a parte do arquivo em memória
-    chunk_data = file.read()
-
-    # Armazena as partes em um dicionário global (não recomendado para produção)
-    if not hasattr(app, 'chunks'):
-        app.chunks = {}
-    app.chunks[f'{file_name}.part{chunk_index}'] = chunk_data
+    # Salva a parte do arquivo em um arquivo temporário
+    chunk_path = os.path.join(UPLOAD_FOLDER, f'{file_name}.part{chunk_index}')
+    file.save(chunk_path)
 
     return jsonify({"message": "Parte recebida com sucesso."})
 
-# Rota para converter o arquivo completo
+# Função assíncrona para converter o arquivo
+def convert_async(file_name, total_chunks):
+    try:
+        # Reúne as partes do arquivo
+        full_file_path = os.path.join(UPLOAD_FOLDER, f'{file_name}.full')
+        with open(full_file_path, 'wb') as full_file:
+            for i in range(total_chunks):
+                chunk_path = os.path.join(UPLOAD_FOLDER, f'{file_name}.part{i}')
+                with open(chunk_path, 'rb') as chunk_file:
+                    full_file.write(chunk_file.read())
+
+        # Converte o arquivo WAV para MP3
+        mp3_path = os.path.join(UPLOAD_FOLDER, f'{os.path.splitext(file_name)[0]}.mp3')
+        (
+            ffmpeg
+            .input(full_file_path)
+            .output(mp3_path, format='mp3')
+            .run()
+        )
+
+        # Limpa os arquivos temporários
+        os.remove(full_file_path)
+        for i in range(total_chunks):
+            os.remove(os.path.join(UPLOAD_FOLDER, f'{file_name}.part{i}'))
+
+    except Exception as e:
+        print(f"Erro ao converter o arquivo: {e}")
+
+# Rota para iniciar a conversão
 @app.route('/convert', methods=['POST'])
 def convert():
     data = request.get_json()
     file_name = data['fileName']
-    total_chunks = data['totalChunks']  # Adicionado para evitar erro de variável não definida
+    total_chunks = data['totalChunks']
 
-    # Cria um buffer em memória para o arquivo completo
-    full_file = io.BytesIO()
+    # Inicia a conversão em uma thread separada
+    thread = Thread(target=convert_async, args=(file_name, total_chunks))
+    thread.start()
 
-    # Reúne as partes do arquivo em memória
-    for i in range(total_chunks):
-        chunk_key = f'{file_name}.part{i}'
-        if chunk_key in app.chunks:
-            full_file.write(app.chunks[chunk_key])
-        else:
-            return jsonify({"error": f"Parte {i} do arquivo não encontrada."}), 400
-
-    # Converte o arquivo WAV para MP3 (usando ffmpeg)
-    try:
-        # Salva o arquivo completo em um buffer temporário
-        full_file.seek(0)  # Volta ao início do buffer
-        with io.BytesIO() as mp3_buffer:
-            (
-                ffmpeg
-                .input('pipe:0')  # Lê da entrada padrão (buffer)
-                .output('pipe:1', format='mp3')  # Escreve na saída padrão (buffer)
-                .run(input=full_file.read(), capture_stdout=True, capture_stderr=True)
-            )
-
-            # Envia o arquivo MP3 como download
-            mp3_buffer.seek(0)
-            return send_file(
-                mp3_buffer,
-                as_attachment=True,
-                download_name=f'{os.path.splitext(file_name)[0]}.mp3',
-                mimetype='audio/mpeg'
-            )
-
-    except ffmpeg.Error as e:
-        return jsonify({"error": f"Erro ao converter o arquivo: {e.stderr.decode()}"}), 500
+    return jsonify({"message": "Conversão iniciada."})
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000)
