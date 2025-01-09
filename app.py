@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, send_file, jsonify
-import ffmpeg
+from pydub import AudioSegment
 import os
 import tempfile
 import shutil
@@ -7,14 +7,10 @@ import shutil
 # Configuração do Flask
 app = Flask(__name__, template_folder=".", static_folder=".")
 
-# Função para converter WAV para MP3 usando ffmpeg-python
+# Função para converter WAV para MP3
 def convert_wav_to_mp3(wav_path, mp3_path):
-    (
-        ffmpeg
-        .input(wav_path)
-        .output(mp3_path)
-        .run()
-    )
+    audio = AudioSegment.from_wav(wav_path)
+    audio.export(mp3_path, format="mp3")
 
 # Rota principal
 @app.route("/")
@@ -35,6 +31,11 @@ def convert():
     file = request.files["file"]
     if file.filename == "":
         return jsonify({"error": "Nenhum arquivo selecionado."}), 400
+
+    # Verifica o tamanho do arquivo (4.5 MB)
+    max_size = 4.5 * 1024 * 1024  # 4.5 MB em bytes
+    if request.content_length > max_size:
+        return jsonify({"error": "O arquivo é muito grande. O tamanho máximo permitido é 4.5 MB."}), 413
 
     # Cria um diretório temporário
     tmpdir = tempfile.mkdtemp()
@@ -68,4 +69,4 @@ def convert():
 
 # Inicia o servidor Flask
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000)

@@ -13,6 +13,13 @@ form.addEventListener('submit', async (e) => {
         return;
     }
 
+    // Verifica o tamanho do arquivo (4.5 MB)
+    const maxSize = 4.5 * 1024 * 1024; // 4.5 MB em bytes
+    if (file.size > maxSize) {
+        alert('O arquivo é muito grande. O tamanho máximo permitido é 4.5 MB.');
+        return;
+    }
+
     convertButton.disabled = true;
     statusText.textContent = "Convertendo...";
     progressBar.style.width = "0%";
