@@ -69,4 +69,7 @@ def convert():
 
 # Inicia o servidor Flask
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Configurações para produção
+    app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
+    app.config['DEBUG'] = False
+    app.run(host='0.0.0.0', port=5000)
